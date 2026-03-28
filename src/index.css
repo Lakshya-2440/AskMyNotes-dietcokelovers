@@ -846,3 +846,13 @@ textarea:focus-visible {
     border-radius: 16px 16px 0 0;
   }
 }
+
+/* Enhanced transitions for Study Mode Dashboards */
+.study-submode-card {
+  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.study-submode-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 20px 40px rgba(0,0,0,0.06);
+}
