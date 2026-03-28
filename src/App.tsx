@@ -962,7 +962,7 @@ function MainApp({ token, username, onLogout }: { token: string, username: strin
                         width: '64px',
                         height: '64px',
                         borderRadius: '20px',
-                        background: '#F8F6F1',
+                        background: '#FFFFFF',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -1066,7 +1066,7 @@ function MainApp({ token, username, onLogout }: { token: string, username: strin
 
                 {studySubMode === 'viva' && (
                   <div className="mx-auto max-w-2xl w-full flex flex-col h-[70vh] bg-white rounded-[40px] shadow-2xl border border-charcoal/5 relative overflow-hidden animate-in zoom-in-95 duration-500">
-                    <div style={{ padding: '2.5rem', borderBottom: '1px solid rgba(0,0,0,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F8F6F1' }}>
+                    <div style={{ padding: '2.5rem', borderBottom: '1px solid rgba(0,0,0,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#FFFFFF' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                         <Bot size={24} />
                         <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>Viva Session</h2>
@@ -1079,7 +1079,7 @@ function MainApp({ token, username, onLogout }: { token: string, username: strin
                           maxWidth: '85%',
                           padding: '1rem 1.5rem',
                           borderRadius: '24px',
-                          background: msg.role === 'ai' ? '#F8F6F1' : 'var(--charcoal)',
+                          background: msg.role === 'ai' ? '#FFFFFF' : 'var(--charcoal)',
                           color: msg.role === 'ai' ? 'var(--charcoal)' : 'white',
                           boxShadow: '0 4px 12px rgba(0,0,0,0.05)'
                         }}>
@@ -1292,7 +1292,7 @@ function MainApp({ token, username, onLogout }: { token: string, username: strin
                                   </div>
 
                                   <textarea
-                                    className="w-full p-6 bg-[#F8F6F1] rounded-2xl border-none outline-none min-h-[160px] text-charcoal/80"
+                                    className="w-full p-6 bg-[#FFFFFF] rounded-2xl border-none outline-none min-h-[160px] text-charcoal/80"
                                     placeholder="Synthesize your answer using your notes..."
                                     disabled={result}
                                     value={saqAnswers[idx] || ''}
@@ -1321,7 +1321,7 @@ function MainApp({ token, username, onLogout }: { token: string, username: strin
                                     <div style={{
                                       marginTop: '2rem',
                                       padding: '2rem',
-                                      background: '#F8F6F1',
+                                      background: '#FFFFFF',
                                       borderRadius: '24px',
                                       borderLeft: `4px solid ${getScoreColor(score)}`
                                     }}>
@@ -1567,7 +1567,7 @@ function MainApp({ token, username, onLogout }: { token: string, username: strin
                   padding: '0.6rem 0.8rem',
                   borderRadius: '999px',
                   border: '1px solid rgba(42, 37, 41, 0.1)',
-                  backgroundColor: '#F8F6F1',
+                  backgroundColor: '#FFFFFF',
                   color: 'var(--text-primary)',
                   fontSize: '0.9rem'
                 }}
@@ -1651,7 +1651,8 @@ export default function App() {
       const button = target.closest('button');
       if (button) {
         const text = button.innerText.trim().toLowerCase();
-        if (text === 'get started' || text === 'upload notes' || text === 'upload your notes') {
+        const landingTriggers = ['get started', 'upload notes', 'upload your notes', 'start your library'];
+        if (landingTriggers.includes(text)) {
           setShowAuth(true);
         }
       }

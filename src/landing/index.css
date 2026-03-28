@@ -6,10 +6,10 @@
 
 @layer base {
   body {
-    @apply bg-[#F3F0E7] text-[#2A2529] font-sans antialiased min-h-screen overflow-x-hidden;
+    @apply bg-[#FFFFFF] text-[#2A2529] font-sans antialiased min-h-screen overflow-x-hidden;
   }
   ::selection {
-    @apply bg-[#2A2529] text-[#F3F0E7];
+    @apply bg-[#2A2529] text-[#FFFFFF];
   }
 
   h1,
@@ -32,7 +32,7 @@
   }
 
   .glass-paper {
-    @apply bg-[#F3F0E7]/90 backdrop-blur-md border border-black/5 shadow-paper;
+    @apply bg-[#FFFFFF]/90 backdrop-blur-md border border-black/5 shadow-paper;
   }
 }
 
