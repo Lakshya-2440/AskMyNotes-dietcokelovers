@@ -17,12 +17,21 @@ import {
   GraduationCap,
   Mic,
   Volume2,
-  Square
+  Square,
+  Send,
+  ShieldCheck,
+  BrainCircuit,
+  FileText,
+  ArrowRight,
+  RotateCw,
+  Trophy,
+  AlertCircle,
+  ThumbsUp
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import './index.css';
-import './output.css';
+import LandingApp from './landing/App';
 
 interface Note {
   id: string;
@@ -45,7 +54,7 @@ interface ChatMessage {
 const MAX_FOLDERS = 3;
 const API_URL = 'http://localhost:5001/api';
 
-function AuthScreen({ onLogin }: { onLogin: (token: string, username: string) => void }) {
+function AuthScreen({ onLogin, onBack }: { onLogin: (token: string, username: string) => void, onBack?: () => void }) {
   const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -78,6 +87,9 @@ function AuthScreen({ onLogin }: { onLogin: (token: string, username: string) =>
   return (
     <div className="auth-container">
       <div className="auth-card">
+        <button onClick={onBack} className="icon-btn" style={{ position: 'absolute', top: '1rem', left: '1rem' }}>
+          <ArrowLeft size={20} />
+        </button>
         <div className="brand" style={{ justifyContent: 'center', marginBottom: '2rem', fontSize: '1.75rem' }}>
           <PenTool size={28} className="brand-icon" />
           <span>AskMyNotes</span>
@@ -106,6 +118,27 @@ function AuthScreen({ onLogin }: { onLogin: (token: string, username: string) =>
           <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '0.75rem' }} disabled={loading}>
             {loading ? 'Processing...' : (isLogin ? 'Sign In' : 'Sign Up')}
           </button>
+
+          <div style={{ margin: '1rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <div style={{ flex: 1, height: '1px', background: 'var(--panel-border)' }} />
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>OR</span>
+            <div style={{ flex: 1, height: '1px', background: 'var(--panel-border)' }} />
+          </div>
+
+          <button
+            type="button"
+            className="btn btn-secondary"
+            style={{ width: '100%', padding: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem' }}
+            onClick={() => window.location.href = 'http://localhost:5001/api/auth/google'}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="currentColor" />
+              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-1 .67-2.28 1.07-3.71 1.07-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="currentColor" />
+              <path d="M5.84 14.11c-.22-.66-.35-1.36-.35-2.11s.13-1.45.35-2.11V7.05H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.95l3.66-2.84z" fill="currentColor" />
+              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.05l3.66 2.84c.87-2.6 3.3-4.51 6.16-4.51z" fill="currentColor" />
+            </svg>
+            Continue with Google
+          </button>
         </form>
 
         <p style={{ textAlign: 'center', marginTop: '1.5rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
@@ -121,6 +154,7 @@ function AuthScreen({ onLogin }: { onLogin: (token: string, username: string) =>
     </div>
   );
 }
+
 
 function MainApp({ token, username, onLogout }: { token: string, username: string, onLogout: () => void }) {
   const [folders, setFolders] = useState<FolderType[]>([]);
@@ -156,7 +190,16 @@ function MainApp({ token, username, onLogout }: { token: string, username: strin
   const [mcqAnswers, setMcqAnswers] = useState<Record<number, string>>({});
   const [saqAnswers, setSaqAnswers] = useState<Record<number, string>>({});
   const [saqResults, setSaqResults] = useState<Record<number, any>>({});
-  const [isGrading, setIsGrading] = useState<Record<number, boolean>>({});
+
+  // New Study Feature States
+  const [gapMap, setGapMap] = useState<any[]>([]);
+  const [isGapMapLoading, setIsGapMapLoading] = useState(false);
+  const [vivaMessages, setVivaMessages] = useState<any[]>([]);
+  const [isVivaLoading, setIsVivaLoading] = useState(false);
+
+  const [vivaQuestionCount, setVivaQuestionCount] = useState(0);
+  const [studySubMode, setStudySubMode] = useState<'menu' | 'quiz' | 'viva' | 'gap-map'>('menu');
+  const [flippedFlashcards, setFlippedFlashcards] = useState<Record<number, boolean>>({});
 
   // Voice States (browser-based STT + TTS)
   const [isListening, setIsListening] = useState(false);
@@ -443,22 +486,89 @@ function MainApp({ token, username, onLogout }: { token: string, username: strin
     }
   }, [isChatOpen, activeFolderId]);
 
+  // --- NEW STUDY FEATURE LOGIC ---
+
+  const fetchGapMap = async () => {
+    if (!activeFolderId) return;
+    setIsGapMapLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/study/gap-map?folderId=${activeFolderId}`, { headers });
+      const data = await res.json();
+      setGapMap(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error(err);
+      setGapMap([]);
+    }
+    setIsGapMapLoading(false);
+  };
+
+  const recordPerformance = async (concept: string, isCorrect: boolean, score?: number) => {
+    if (!activeFolderId || !concept) return;
+    try {
+      await fetch(`${API_URL}/study/performance`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ folderId: activeFolderId, conceptName: concept, isCorrect, score })
+      });
+      fetchGapMap();
+    } catch (err) { console.error(err); }
+  };
+
+
+
+  const handleVivaInteraction = async (userAnswer?: string) => {
+    if (!activeFolderId) return;
+    setIsVivaLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/study/viva`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          folderId: activeFolderId,
+          history: vivaMessages,
+          userAnswer,
+          questionCount: vivaQuestionCount
+        })
+      });
+      const data = await res.json();
+      if (userAnswer) {
+        setVivaMessages(prev => [...prev, { role: 'user', content: userAnswer }]);
+        setVivaQuestionCount(prev => prev + 1);
+      }
+      setVivaMessages(prev => [...prev, { role: 'ai', content: data.examinerResponse, isFinal: data.isFinalResult }]);
+      if (data.performanceScore !== undefined) {
+        // Performance score received
+      }
+    } catch (err) {
+      console.error(err);
+    }
+    setIsVivaLoading(false);
+  };
+
+  useEffect(() => {
+    if (isStudyMode && activeFolderId) {
+      fetchGapMap();
+    }
+  }, [isStudyMode, activeFolderId]);
+
   // Study Actions
-  const handleGenerateStudyMaterial = async () => {
+  const handleGenerateStudyMaterial = async (mode?: 'weakness', targetConcept?: string) => {
     if (!activeFolderId) return;
     setIsStudyLoading(true);
     setStudyData(null);
     setMcqAnswers({});
     setSaqAnswers({});
     setSaqResults({});
-    setIsGrading({});
+    setFlippedFlashcards({});
     try {
       const res = await fetch(`${API_URL}/study`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
           folderId: activeFolderId,
-          folderName: activeFolder ? activeFolder.name : "Subject"
+          folderName: activeFolder ? activeFolder.name : "Subject",
+          mode,
+          targetConcept
         })
       });
       const data = await res.json();
@@ -475,7 +585,6 @@ function MainApp({ token, username, onLogout }: { token: string, username: strin
     const userAnswer = saqAnswers[idx];
     if (!userAnswer || !userAnswer.trim()) return;
 
-    setIsGrading(prev => ({ ...prev, [idx]: true }));
     try {
       const res = await fetch(`${API_URL}/grade`, {
         method: 'POST',
@@ -489,14 +598,13 @@ function MainApp({ token, username, onLogout }: { token: string, username: strin
       const data = await res.json();
       if (res.ok) {
         setSaqResults(prev => ({ ...prev, [idx]: data }));
+        recordPerformance(saq.concept, data.score >= 5, data.score);
       } else {
         alert(data.error || 'Failed to grade answer');
       }
     } catch (err) {
       console.error(err);
       alert('Error grading answer');
-    } finally {
-      setIsGrading(prev => ({ ...prev, [idx]: false }));
     }
   };
 
@@ -635,7 +743,7 @@ function MainApp({ token, username, onLogout }: { token: string, username: strin
         <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--panel-border)', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
           <div className="brand" style={{ marginBottom: '1rem' }}>
             <PenTool size={22} className="brand-icon" />
-            <span style={{ display: window.innerWidth <= 900 ? 'none' : 'block' }}>Reflect</span>
+            <span style={{ display: window.innerWidth <= 900 ? 'none' : 'block' }}>Ask My Notes</span>
           </div>
 
           <div className="user-profile">
@@ -719,7 +827,7 @@ function MainApp({ token, username, onLogout }: { token: string, username: strin
       {/* Secondary Sidebar - Notes */}
       <aside className={`sidebar ${!isSidebarOpen ? 'hidden' : ''}`}>
         <div className="sidebar-header" style={{ padding: '1rem 1.5rem', borderBottom: 'none', flexDirection: 'column', alignItems: 'flex-start', gap: '0.5rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#fff', fontSize: '1.25rem', fontWeight: 600 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-primary)', fontSize: '1.25rem', fontWeight: 600 }}>
             {activeFolder ? activeFolder.name : "Select a Subject"}
           </div>
         </div>
@@ -733,7 +841,7 @@ function MainApp({ token, username, onLogout }: { token: string, username: strin
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               style={{
-                width: '100%', padding: '0.6rem 0.6rem 0.6rem 2.2rem', backgroundColor: 'rgba(255, 255, 255, 0.05)', borderRadius: '8px', color: 'white', fontSize: '0.9rem'
+                width: '100%', padding: '0.6rem 0.6rem 0.6rem 2.2rem', backgroundColor: 'rgba(42, 37, 41, 0.05)', borderRadius: '8px', color: 'var(--text-primary)', fontSize: '0.9rem'
               }}
             />
           </div>
@@ -792,180 +900,450 @@ function MainApp({ token, username, onLogout }: { token: string, username: strin
       <main className="editor-container">
         {isStudyMode ? (
           <div style={{ padding: '2rem', flex: 1, overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-              <h2>Study Mode: {activeFolder ? activeFolder.name : "Subject"}</h2>
-              <button
-                className="btn btn-primary"
-                onClick={handleGenerateStudyMaterial}
-                disabled={!activeFolderId || isStudyLoading}
-              >
-                {isStudyLoading ? 'Generating...' : 'Generate New Material from Notes'}
-              </button>
-            </div>
+            {/* Selection Menu */}
+            {studySubMode === 'menu' ? (
+              <div className="mx-auto max-w-5xl w-full py-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                <div style={{ textAlign: 'center', marginBottom: '4rem' }}>
+                  <div className="w-16 h-16 rounded-3xl bg-charcoal text-paleivory flex items-center justify-center mx-auto mb-6 shadow-xl">
+                    <GraduationCap size={32} />
+                  </div>
+                  <h1 style={{ fontSize: '2.5rem', fontWeight: 800, marginBottom: '1rem', letterSpacing: '-0.02em' }}>
+                    Master {activeFolder ? activeFolder.name : "Subject"}
+                  </h1>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '1.1rem', maxWidth: '600px', margin: '0 auto' }}>
+                    Choose your training path. Our AI scales the difficulty based on your library content.
+                  </p>
+                </div>
 
-            {isStudyLoading ? (
-              <div style={{ textAlign: 'center', color: 'var(--text-secondary)', marginTop: '4rem' }}>
-                <GraduationCap size={48} style={{ opacity: 0.5, marginBottom: '1rem', animation: 'pulse 2s infinite' }} />
-                <h3>Analyzing your notes...</h3>
-                <p>Generating targeted questions to test your knowledge.</p>
-              </div>
-            ) : studyData ? (
-              studyData.message ? (
-                <div className="empty-state">{studyData.message}</div>
-              ) : (
-                <div style={{ maxWidth: '800px', margin: '0 auto' }}>
-                  {studyData.mcqs && studyData.mcqs.length > 0 && (
-                    <section style={{ marginBottom: '3rem' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '1px solid var(--panel-border)', paddingBottom: '0.5rem', marginBottom: '1.5rem' }}>
-                        <h3 style={{ margin: 0 }}>Multiple Choice Questions</h3>
-                        {Object.keys(mcqAnswers).length === studyData.mcqs.length && (
-                          <span style={{ fontWeight: 'bold', color: 'var(--primary)' }}>
-                            Score: {studyData.mcqs.filter((m: any, i: number) => mcqAnswers[i] === m.correct_answer).length} / {studyData.mcqs.length}
-                          </span>
-                        )}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '2rem' }}>
+                  {[
+                    {
+                      id: 'quiz',
+                      title: 'Practice Quiz',
+                      icon: <FileText size={28} />,
+                      desc: 'AI-generated MCQs and short-answers tailored to your notes.',
+                      action: () => { setStudySubMode('quiz'); if (!studyData) handleGenerateStudyMaterial(); },
+                    },
+                    {
+                      id: 'viva',
+                      title: 'Oral Examiner',
+                      icon: <Mic size={28} />,
+                      desc: 'Defend your knowledge in a strict 3-question structured viva session.',
+                      action: () => { setStudySubMode('viva'); handleVivaInteraction(); },
+                    },
+                    {
+                      id: 'gap-map',
+                      title: 'Knowledge Map',
+                      icon: <BrainCircuit size={28} />,
+                      desc: 'Visualize your conceptual hierarchy and target your failing topics.',
+                      action: () => { setStudySubMode('gap-map'); fetchGapMap(); },
+                    }
+                  ].map((card) => (
+                    <div
+                      key={card.id}
+                      onClick={card.action}
+                      className="group"
+                      style={{
+                        background: 'white',
+                        borderRadius: '32px',
+                        padding: '2.5rem',
+                        border: '1px solid rgba(42, 37, 41, 0.05)',
+                        cursor: 'pointer',
+                        transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '1.5rem',
+                        boxShadow: '0 4px 20px rgba(0,0,0,0.02)',
+                        position: 'relative',
+                        overflow: 'hidden'
+                      }}
+                    >
+                      <div style={{
+                        width: '64px',
+                        height: '64px',
+                        borderRadius: '20px',
+                        background: '#F8F6F1',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'var(--charcoal)',
+                      }}>
+                        {card.icon}
                       </div>
+                      <div>
+                        <h3 style={{ fontSize: '1.4rem', fontWeight: 800, marginBottom: '0.75rem' }}>{card.title}</h3>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: 1.6 }}>{card.desc}</p>
+                      </div>
+                      <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700, fontSize: '0.85rem', color: 'var(--charcoal)', opacity: 0.6 }}>
+                        START PATH <ArrowRight size={16} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="mx-auto max-w-4xl w-full">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3rem', borderBottom: '1px solid var(--panel-border)', paddingBottom: '1.5rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <button
+                      onClick={() => { setStudySubMode('menu'); }}
+                      className="w-10 h-10 rounded-xl bg-charcoal/5 flex items-center justify-center text-charcoal hover:bg-charcoal hover:text-paleivory transition-all mr-2"
+                    >
+                      <ArrowLeft size={20} />
+                    </button>
+                    <div className="w-10 h-10 rounded-xl bg-charcoal flex items-center justify-center text-paleivory">
+                      {studySubMode === 'quiz' ? <FileText size={22} /> : studySubMode === 'viva' ? <Mic size={22} /> : <BrainCircuit size={22} />}
+                    </div>
+                    <h2 style={{ margin: 0, fontSize: '1.75rem' }}>
+                      {studySubMode === 'quiz' ? 'Practice Quiz' : studySubMode === 'viva' ? 'AI Oral Examiner' : 'Knowledge Map'}
+                    </h2>
+                  </div>
 
-                      {studyData.mcqs.map((mcq: any, idx: number) => {
-                        const isAnswered = mcqAnswers[idx] !== undefined;
-
-                        return (
-                          <div key={idx} style={{ backgroundColor: 'rgba(255,255,255,0.03)', padding: '1.5rem', borderRadius: '12px', marginBottom: '1.5rem', transition: 'all 0.3s ease' }}>
-                            <p style={{ fontWeight: 600, marginBottom: '1rem', fontSize: '1.05rem' }}>{idx + 1}. {mcq.question}</p>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem' }}>
-                              {Object.entries(mcq.options).map(([key, value]) => {
-                                const isSelected = mcqAnswers[idx] === key;
-                                const isCorrect = key === mcq.correct_answer;
-
-                                let bgColor = 'rgba(255,255,255,0.05)';
-                                let borderColor = 'transparent';
-
-                                if (isAnswered) {
-                                  if (isCorrect) {
-                                    bgColor = 'rgba(34, 197, 94, 0.15)';
-                                    borderColor = 'rgba(34, 197, 94, 0.5)';
-                                  } else if (isSelected) {
-                                    bgColor = 'rgba(239, 68, 68, 0.15)';
-                                    borderColor = 'rgba(239, 68, 68, 0.5)';
-                                  }
-                                }
-
-                                return (
-                                  <button
-                                    key={key}
-                                    onClick={() => !isAnswered && setMcqAnswers(prev => ({ ...prev, [idx]: key }))}
-                                    style={{
-                                      padding: '1rem',
-                                      backgroundColor: bgColor,
-                                      border: `1px solid ${borderColor}`,
-                                      borderRadius: '8px',
-                                      textAlign: 'left',
-                                      cursor: isAnswered ? 'default' : 'pointer',
-                                      color: 'black',
-                                      display: 'flex',
-                                      gap: '0.75rem',
-                                      transition: 'all 0.2s',
-                                      opacity: isAnswered && !isCorrect && !isSelected ? 0.6 : 1
-                                    }}
-                                  >
-                                    <strong style={{ minWidth: '20px' }}>{key}:</strong>
-                                    <span>{value as string}</span>
-                                  </button>
-                                );
-                              })}
-                            </div>
-
-                            {isAnswered && (
-                              <div style={{ marginTop: '1rem', padding: '1.2rem', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: '8px', borderLeft: `4px solid ${mcqAnswers[idx] === mcq.correct_answer ? '#22c55e' : '#ef4444'}`, animation: 'fadeIn 0.4s ease-out' }}>
-                                <p style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>
-                                  <strong>{mcqAnswers[idx] === mcq.correct_answer ? '✅ Correct!' : `❌ Incorrect. The correct answer was ${mcq.correct_answer}.`}</strong>
-                                </p>
-                                <p style={{ color: 'rgba(255,255,255,0.9)', lineHeight: 1.5 }}><strong>Explanation:</strong> {mcq.explanation}</p>
-                                {mcq.citations && mcq.citations.length > 0 && (
-                                  <p style={{ marginTop: '0.75rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>📚 Citations: {mcq.citations.join(', ')}</p>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </section>
-                  )}
-
-                  {studyData.short_answer_questions && studyData.short_answer_questions.length > 0 && (
-                    <section style={{ marginBottom: '3rem' }}>
-                      <h3 style={{ borderBottom: '1px solid var(--panel-border)', paddingBottom: '0.5rem', marginBottom: '1.5rem' }}>Short Answer Questions</h3>
-                      {studyData.short_answer_questions.map((saq: any, idx: number) => (
-                        <div key={idx} style={{ backgroundColor: 'rgba(255,255,255,0.03)', padding: '1.5rem', borderRadius: '12px', marginBottom: '1.5rem' }}>
-                          <p style={{ fontWeight: 600, marginBottom: '1rem' }}>{idx + 1}. {saq.question}</p>
-                          <textarea
-                            placeholder="Write your answer here..."
-                            value={saqAnswers[idx] || ''}
-                            onChange={(e) => setSaqAnswers(prev => ({ ...prev, [idx]: e.target.value }))}
-                            disabled={!!saqResults[idx] || isGrading[idx]}
-                            style={{ width: '100%', height: '100px', padding: '1rem', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: '8px', border: '1px solid var(--panel-border)', color: 'white', marginBottom: '1rem', resize: 'vertical' }}
-                          />
-
-                          {!saqResults[idx] ? (
-                            <button
-                              className="btn btn-primary"
-                              disabled={!saqAnswers[idx]?.trim() || isGrading[idx]}
-                              onClick={() => handleGradeSAQ(idx, saq)}
-                            >
-                              {isGrading[idx] ? 'Grading...' : 'Submit Answer'}
-                            </button>
-                          ) : (
-                            <div style={{ padding: '1.2rem', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: '8px', borderLeft: `4px solid ${saqResults[idx].score >= 7 ? '#22c55e' : saqResults[idx].score >= 4 ? '#eab308' : '#ef4444'}`, animation: 'fadeIn 0.4s ease-out' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
-                                <span style={{ fontSize: '1.5rem', fontWeight: 'bold', color: saqResults[idx].score >= 7 ? '#22c55e' : saqResults[idx].score >= 4 ? '#eab308' : '#ef4444' }}>
-                                  Score: {saqResults[idx].score}/10
-                                </span>
-                              </div>
-                              <p style={{ color: 'rgba(255,255,255,0.9)', lineHeight: 1.5, marginBottom: '1rem' }}><strong>Feedback:</strong> {saqResults[idx].feedback}</p>
-
-                              <details style={{ cursor: 'pointer' }}>
-                                <summary style={{
-                                  color: 'var(--primary)',
-                                  fontWeight: 500,
-                                  padding: '0.5rem',
-                                  backgroundColor: 'rgba(255,255,255,0.05)',
-                                  borderRadius: '6px',
-                                  display: 'inline-block'
-                                }}>
-                                  Reveal Model Answer
-                                </summary>
-                                <div style={{ marginTop: '1rem', padding: '1rem', backgroundColor: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.3)', borderRadius: '8px' }}>
-                                  <p style={{ lineHeight: 1.5 }}>{saq.model_answer}</p>
-                                  {saq.citations && saq.citations.length > 0 && (
-                                    <p style={{ marginTop: '0.75rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>📚 Citations: {saq.citations.join(', ')}</p>
-                                  )}
-                                </div>
-                              </details>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </section>
-                  )}
-
-                  {studyData.references && studyData.references.length > 0 && (
-                    <section>
-                      <h3 style={{ borderBottom: '1px solid var(--panel-border)', paddingBottom: '0.5rem', marginBottom: '1.5rem' }}>References</h3>
-                      <ul style={{ listStyleType: 'none', padding: 0 }}>
-                        {studyData.references.map((ref: any, idx: number) => (
-                          <li key={idx} style={{ marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>
-                            {ref.id} {ref.citation}
-                          </li>
-                        ))}
-                      </ul>
-                    </section>
+                  {studySubMode === 'quiz' && (
+                    <button
+                      className="btn btn-primary"
+                      onClick={() => handleGenerateStudyMaterial()}
+                      disabled={!activeFolderId || isStudyLoading}
+                      style={{ borderRadius: '12px', padding: '0.75rem 1.5rem' }}
+                    >
+                      {isStudyLoading ? 'Generating...' : 'Refresh Quiz'}
+                    </button>
                   )}
                 </div>
-              )
-            ) : (
-              <div className="empty-state">
-                <GraduationCap size={64} style={{ opacity: 0.5, marginBottom: '1rem' }} />
-                <h3>Ready to study {activeFolder ? activeFolder.name : "this subject"}?</h3>
-                <p>Click the button above to generate a practice exam from your notes.</p>
+
+                {/* Specific Sub-Mode Content */}
+                {studySubMode === 'gap-map' && (
+                  <div className="animate-in fade-in slide-in-from-bottom-4 duration-500" style={{ padding: '2rem', background: 'rgba(42, 37, 41, 0.03)', borderRadius: '32px', border: '1px solid rgba(42, 37, 41, 0.05)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        <BrainCircuit size={20} className="text-charcoal" />
+                        <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Knowledge Gap Map</h3>
+                      </div>
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Live proficiency tracking</span>
+                    </div>
+
+                    {isGapMapLoading ? (
+                      <div className="flex items-center gap-2 py-4">
+                        <div className="w-4 h-4 border-2 border-charcoal/20 border-t-charcoal rounded-full animate-spin" />
+                        <span className="text-sm opacity-50">Mapping connections...</span>
+                      </div>
+                    ) : gapMap.length === 0 ? (
+                      <div style={{ padding: '2rem', border: '1px dashed rgba(42, 37, 41, 0.2)', borderRadius: '24px', textAlign: 'center' }}>
+                        <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Answer quiz questions to start mapping your knowledge.</p>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem' }}>
+                        {gapMap.map((concept, i) => {
+                          const accuracy = (concept.correct_count / concept.attempt_count) * 100;
+                          const status = accuracy >= 80 ? 'strong' : accuracy >= 50 ? 'weak' : 'unknown';
+                          const color = status === 'strong' ? '#22c55e' : status === 'weak' ? '#eab308' : '#ef4444';
+
+                          return (
+                            <div key={i} style={{ padding: '1.25rem', background: 'white', borderRadius: '20px', border: `1px solid ${color}20`, boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                                <span style={{ fontSize: '0.95rem', fontWeight: 700 }}>{concept.name}</span>
+                                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: color }} />
+                              </div>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between' }}>
+                                <span>{status.toUpperCase()}</span>
+                                <span>{Math.round(accuracy)}%</span>
+                              </div>
+                              <div style={{ width: '100%', height: '4px', background: 'rgba(0,0,0,0.05)', borderRadius: '2px', overflow: 'hidden', marginBottom: '1rem' }}>
+                                <div style={{ width: `${accuracy}%`, height: '100%', background: color }} />
+                              </div>
+                              {status !== 'strong' && (
+                                <button onClick={() => { setStudySubMode('quiz'); handleGenerateStudyMaterial('weakness', concept.name); }} className="w-full py-2 bg-charcoal/5 rounded-lg text-[10px] uppercase font-bold tracking-wider hover:bg-charcoal hover:text-white transition-all">
+                                  Target Weakness
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {studySubMode === 'viva' && (
+                  <div className="mx-auto max-w-2xl w-full flex flex-col h-[70vh] bg-white rounded-[40px] shadow-2xl border border-charcoal/5 relative overflow-hidden animate-in zoom-in-95 duration-500">
+                    <div style={{ padding: '2.5rem', borderBottom: '1px solid rgba(0,0,0,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F8F6F1' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                        <Bot size={24} />
+                        <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>Viva Session</h2>
+                      </div>
+                    </div>
+                    <div style={{ flex: 1, overflowY: 'auto', padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                      {vivaMessages.map((msg, i) => (
+                        <div key={i} style={{
+                          alignSelf: msg.role === 'ai' ? 'flex-start' : 'flex-end',
+                          maxWidth: '85%',
+                          padding: '1rem 1.5rem',
+                          borderRadius: '24px',
+                          background: msg.role === 'ai' ? '#F8F6F1' : 'var(--charcoal)',
+                          color: msg.role === 'ai' ? 'var(--charcoal)' : 'white',
+                          boxShadow: '0 4px 12px rgba(0,0,0,0.05)'
+                        }}>
+                          {msg.content}
+                        </div>
+                      ))}
+                      {isVivaLoading && <div className="p-4 rounded-xl bg-charcoal/5 text-sm animate-pulse">Examiner is formulating feedback...</div>}
+                    </div>
+                    <div style={{ padding: '2rem', borderTop: '1px solid rgba(0,0,0,0.05)', background: 'white' }}>
+                      <div style={{ display: 'flex', gap: '1rem' }}>
+                        <input
+                          onKeyDown={e => { if (e.key === 'Enter' && (e.target as HTMLInputElement).value) { handleVivaInteraction((e.target as HTMLInputElement).value); (e.target as HTMLInputElement).value = ''; } }}
+                          className="flex-1 p-4 bg-gray-100 rounded-2xl border-none outline-none focus:ring-2 focus:ring-charcoal/20"
+                          placeholder="Defend your thesis..."
+                        />
+                        <button onClick={handleSTT} className="p-4 bg-charcoal text-white rounded-2xl hover:bg-charcoal/90 transition-colors"><Mic size={20} /></button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {studySubMode === 'quiz' && (
+                  <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                    {isStudyLoading ? (
+                      <div className="py-20 text-center">
+                        <div className="w-12 h-12 border-4 border-charcoal/10 border-t-charcoal rounded-full animate-spin mx-auto mb-4" />
+                        <p className="text-charcoal/60">Generating your customized assessment...</p>
+                      </div>
+                    ) : studyData ? (
+                      <div className="pb-32">
+                        {studyData.mcqs && studyData.mcqs.length > 0 && (
+                          <section style={{ marginBottom: '4rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '1px solid var(--panel-border)', paddingBottom: '0.5rem', marginBottom: '2rem' }}>
+                              <h3 style={{ margin: 0, fontFamily: 'Merriweather, serif' }}>Practice Quiz</h3>
+                              <span style={{ fontSize: '0.8rem', color: 'rgba(42, 37, 41, 0.5)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                {studyData.mcqs.length} Questions
+                              </span>
+                            </div>
+                            {studyData.mcqs.map((mcq: any, idx: number) => {
+                              const isAnswered = mcqAnswers[idx] !== undefined;
+                              return (
+                                <div key={idx} style={{
+                                  padding: '2.5rem',
+                                  background: 'white',
+                                  borderRadius: '32px',
+                                  border: '1px solid rgba(42,37,41,0.05)',
+                                  marginBottom: '2rem',
+                                  boxShadow: '0 4px 20px rgba(0,0,0,0.02)'
+                                }}>
+                                  <h4 style={{ margin: '0 0 2rem 0', fontSize: '1.2rem', lineHeight: 1.4, fontWeight: 700 }}>{mcq.question}</h4>
+                                  <div style={{ display: 'grid', gap: '0.75rem' }}>
+                                    {Object.entries(mcq.options).map(([key, value]) => (
+                                      <button
+                                        key={key}
+                                        disabled={isAnswered}
+                                        onClick={() => {
+                                          setMcqAnswers(prev => ({ ...prev, [idx]: key }));
+                                          recordPerformance(mcq.concept, key === mcq.correct_answer);
+                                        }}
+                                        style={{
+                                          padding: '1.25rem 1.5rem',
+                                          textAlign: 'left',
+                                          borderRadius: '16px',
+                                          border: `2px solid ${isAnswered ? (key === mcq.correct_answer ? '#22c55e' : (mcqAnswers[idx] === key ? '#ef4444' : 'rgba(0,0,0,0.05)')) : 'rgba(0,0,0,0.1)'}`,
+                                          background: isAnswered && key === mcq.correct_answer ? 'rgba(34, 197, 94, 0.05)' : 'white',
+                                        }}
+                                      >
+                                        {value as string}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </section>
+                        )}
+
+                        {studyData.flashcards && studyData.flashcards.length > 0 && (
+                          <section style={{ marginBottom: '4rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '1px solid var(--panel-border)', paddingBottom: '0.5rem', marginBottom: '2rem' }}>
+                              <h3 style={{ margin: 0, fontFamily: 'Merriweather, serif' }}>Flashcards</h3>
+                              <span style={{ fontSize: '0.8rem', color: 'rgba(42, 37, 41, 0.5)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                {studyData.flashcards.length} Cards
+                              </span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '2rem' }}>
+                              {studyData.flashcards.map((card: any, idx: number) => (
+                                <div
+                                  key={idx}
+                                  onClick={() => setFlippedFlashcards(prev => ({ ...prev, [idx]: !prev[idx] }))}
+                                  style={{
+                                    height: '220px',
+                                    perspective: '1000px',
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  <div style={{
+                                    position: 'relative',
+                                    width: '100%',
+                                    height: '100%',
+                                    textAlign: 'center',
+                                    transition: 'transform 0.6s',
+                                    transformStyle: 'preserve-3d',
+                                    transform: flippedFlashcards[idx] ? 'rotateY(180deg)' : 'rotateY(0deg)',
+                                    borderRadius: '32px',
+                                    boxShadow: '0 10px 30px rgba(0,0,0,0.03)'
+                                  }}>
+                                    {/* Front */}
+                                    <div style={{
+                                      position: 'absolute',
+                                      width: '100%',
+                                      height: '100%',
+                                      backfaceVisibility: 'hidden',
+                                      background: 'white',
+                                      border: '1px solid rgba(0,0,0,0.05)',
+                                      borderRadius: '32px',
+                                      display: 'flex',
+                                      flexDirection: 'column',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      padding: '2rem'
+                                    }}>
+                                      <p style={{ fontWeight: 700, fontSize: '1.1rem', margin: 0 }}>{card.front}</p>
+                                      <div style={{ marginTop: '1.5rem', color: 'rgba(0,0,0,0.3)' }}>
+                                        <RotateCw size={20} />
+                                      </div>
+                                    </div>
+                                    {/* Back */}
+                                    <div style={{
+                                      position: 'absolute',
+                                      width: '100%',
+                                      height: '100%',
+                                      backfaceVisibility: 'hidden',
+                                      background: 'var(--primary)',
+                                      color: 'black',
+                                      backgroundColor: 'white',
+                                      borderRadius: '32px',
+                                      display: 'flex',
+                                      flexDirection: 'column',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      padding: '2rem',
+                                      transform: 'rotateY(180deg)'
+                                    }}>
+                                      <p style={{ margin: 0, lineHeight: 1.5 }}>{card.back}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </section>
+                        )}
+
+                        {studyData.short_answer_questions && studyData.short_answer_questions.length > 0 && (
+                          <section style={{ marginBottom: '4rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '1px solid var(--panel-border)', paddingBottom: '0.5rem', marginBottom: '2rem' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                <h3 style={{ margin: 0, fontFamily: 'Merriweather, serif' }}>Short Answers</h3>
+                              </div>
+                              <span style={{ fontSize: '0.8rem', color: 'rgba(42, 37, 41, 0.5)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                {studyData.short_answer_questions.length} Items
+                              </span>
+                            </div>
+                            {studyData.short_answer_questions.map((saq: any, idx: number) => {
+                              const result = saqResults[idx];
+                              const score = result ? result.score : 0;
+                              const getScoreColor = (s: number) => {
+                                if (s >= 8) return '#22c55e';
+                                if (s >= 5) return '#eab308';
+                                return '#ef4444';
+                              };
+                              const getScoreBg = (s: number) => {
+                                if (s >= 8) return 'rgba(34, 197, 94, 0.05)';
+                                if (s >= 5) return 'rgba(234, 179, 8, 0.05)';
+                                return 'rgba(239, 68, 68, 0.05)';
+                              };
+                              const getScoreIcon = (s: number) => {
+                                if (s >= 8) return <Trophy size={20} />;
+                                if (s >= 5) return <ThumbsUp size={20} />;
+                                return <AlertCircle size={20} />;
+                              };
+
+                              return (
+                                <div key={idx} style={{
+                                  padding: '3rem',
+                                  background: 'white',
+                                  borderRadius: '32px',
+                                  border: '1px solid rgba(42,37,41,0.05)',
+                                  marginBottom: '2rem',
+                                  boxShadow: '0 4px 24px rgba(0,0,0,0.02)'
+                                }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2rem' }}>
+                                    <h4 style={{ margin: 0, fontSize: '1.25rem', lineHeight: 1.4, fontWeight: 700, flex: 1, paddingRight: '2rem' }}>{saq.question}</h4>
+                                    {result && (
+                                      <div style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem',
+                                        padding: '0.5rem 1rem',
+                                        borderRadius: '99px',
+                                        background: getScoreBg(score),
+                                        color: getScoreColor(score),
+                                        fontWeight: 700,
+                                        fontSize: '0.9rem'
+                                      }}>
+                                        {getScoreIcon(score)}
+                                        <span>{score}/10</span>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <textarea
+                                    className="w-full p-6 bg-[#F8F6F1] rounded-2xl border-none outline-none min-h-[160px] text-charcoal/80"
+                                    placeholder="Synthesize your answer using your notes..."
+                                    disabled={result}
+                                    value={saqAnswers[idx] || ''}
+                                    onChange={e => setSaqAnswers(prev => ({ ...prev, [idx]: e.target.value }))}
+                                    style={{
+                                      resize: 'none',
+                                      fontSize: '1rem',
+                                      lineHeight: 1.6,
+                                      borderRadius: '24px'
+                                    }}
+                                  />
+
+                                  {!result && (
+                                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
+                                      <button
+                                        onClick={() => handleGradeSAQ(idx, saq)}
+                                        disabled={!saqAnswers[idx]?.trim()}
+                                        className="flex items-center gap-2 px-8 py-4 bg-charcoal text-black rounded-2xl hover:bg-charcoal/90 transition-all font-semibold disabled:opacity-50"
+                                      >
+                                        Grade My Response
+                                      </button>
+                                    </div>
+                                  )}
+
+                                  {result && (
+                                    <div style={{
+                                      marginTop: '2rem',
+                                      padding: '2rem',
+                                      background: '#F8F6F1',
+                                      borderRadius: '24px',
+                                      borderLeft: `4px solid ${getScoreColor(score)}`
+                                    }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', color: 'var(--text-secondary)', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase' }}>
+                                        <Bot size={16} /> Examiner Feedback
+                                      </div>
+                                      <p style={{ margin: 0, color: 'var(--text-primary)', lineHeight: 1.6 }}>{result.feedback}</p>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </section>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="py-20 text-center border-2 border-dashed rounded-[40px] border-charcoal/10">
+                        <p className="text-charcoal/60">Generate material to begin testing.</p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1078,36 +1456,36 @@ function MainApp({ token, username, onLogout }: { token: string, username: strin
               {isChatLoading && <div className="chat-msg model">Thinking...</div>}
             </div>
             <div className="chat-input-area" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '1.5rem', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                {isListening && <span style={{ color: '#ef4444', marginBottom: '0.5rem', fontSize: '0.8rem', fontWeight: 'bold' }}>Listening...</span>}
-                <button
-                  className="btn"
-                  onClick={handleSTT}
-                  disabled={isChatLoading}
-                  style={{
-                    borderRadius: '50%',
-                    width: '56px',
-                    height: '56px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    background: isListening ? '#ef4444' : 'var(--primary)',
-                    boxShadow: isListening ? '0 0 16px rgba(239, 68, 68, 0.4)' : '0 4px 12px rgba(34, 197, 94, 0.2)',
-                    color: '#fff',
-                    border: 'none',
-                    transition: 'all 0.3s ease',
-                    cursor: isChatLoading ? 'wait' : 'pointer'
-                  }}
-                  title={isListening ? "Tap to stop listening" : "Tap to start speaking"}
-                >
-                  <Mic size={28} />
-                </button>
-                <span style={{ color: 'var(--text-secondary)', marginTop: '0.5rem', fontSize: '0.75rem' }}>
-                  {isChatLoading
-                    ? 'Thinking...'
-                    : isListening
-                      ? 'Listening... tap again when you finish'
-                      : 'Tap to speak to your Teacher'}
-                </span>
+              {isListening && <span style={{ color: '#ef4444', marginBottom: '0.5rem', fontSize: '0.8rem', fontWeight: 'bold' }}>Listening...</span>}
+              <button
+                className="btn"
+                onClick={handleSTT}
+                disabled={isChatLoading}
+                style={{
+                  borderRadius: '50%',
+                  width: '56px',
+                  height: '56px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: isListening ? '#ef4444' : 'var(--primary)',
+                  boxShadow: isListening ? '0 0 16px rgba(239, 68, 68, 0.4)' : '0 4px 12px rgba(34, 197, 94, 0.2)',
+                  color: 'var(--text-primary)',
+                  border: 'none',
+                  transition: 'all 0.3s ease',
+                  cursor: isChatLoading ? 'wait' : 'pointer'
+                }}
+                title={isListening ? "Tap to stop listening" : "Tap to start speaking"}
+              >
+                <Mic size={28} />
+              </button>
+              <span style={{ color: 'var(--text-secondary)', marginTop: '0.5rem', fontSize: '0.75rem' }}>
+                {isChatLoading
+                  ? 'Thinking...'
+                  : isListening
+                    ? 'Listening... tap again when you finish'
+                    : 'Tap to speak to your Teacher'}
+              </span>
             </div>
           </div>
         )}
@@ -1126,7 +1504,7 @@ function MainApp({ token, username, onLogout }: { token: string, username: strin
 
       {/* Assistant Chat Bot Panel (text-only, separate from Teacher Mode) */}
       {isAssistantOpen && activeFolderId && (
-        <div className="chat-panel" style={{ right: '1.5rem', bottom: '1.5rem', top: 'auto', height: '420px' }}>
+        <div className="chat-panel">
           <div className="chat-header">
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <Bot size={18} /> Chat Bot
@@ -1138,18 +1516,40 @@ function MainApp({ token, username, onLogout }: { token: string, username: strin
           <div className="chat-messages">
             {assistantMessages.length === 0 ? (
               <div className="chat-msg system">
-                This is your note-aware chat bot. Ask any question about this subject.
+                This AI is grounded in your uploaded notes. Ask anything about this subject!
               </div>
             ) : (
               assistantMessages.map((msg, idx) => (
                 <div key={idx} className={`chat-msg ${msg.role}`}>
-                  {msg.content}
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      p: ({ node, ...props }) => <p className="mb-2 last:mb-0" {...props} />,
+                      sup: ({ node, ...props }) => <sup className="text-charcoal/50 font-mono text-[10px] ml-0.5" {...props} />,
+                    }}
+                  >
+                    {msg.content}
+                  </ReactMarkdown>
+                  {msg.role === 'model' && (
+                    <div className="sourced-badge">
+                      <ShieldCheck size={12} className="text-charcoal/60" />
+                      100% Sourced from Notes
+                    </div>
+                  )}
                 </div>
               ))
             )}
-            {isAssistantLoading && <div className="chat-msg model">Thinking...</div>}
+            {isAssistantLoading && (
+              <div className="chat-msg model">
+                <div className="flex gap-1.5 items-center">
+                  <div className="w-1.5 h-1.5 rounded-full bg-charcoal/30 animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <div className="w-1.5 h-1.5 rounded-full bg-charcoal/30 animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <div className="w-1.5 h-1.5 rounded-full bg-charcoal/30 animate-bounce" style={{ animationDelay: '300ms' }} />
+                </div>
+              </div>
+            )}
           </div>
-          <div className="chat-input-area" style={{ padding: '1rem', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+          <div className="chat-input-area">
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -1166,28 +1566,28 @@ function MainApp({ token, username, onLogout }: { token: string, username: strin
                   flex: 1,
                   padding: '0.6rem 0.8rem',
                   borderRadius: '999px',
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  backgroundColor: 'rgba(0,0,0,0.4)',
-                  color: '#fff',
+                  border: '1px solid rgba(42, 37, 41, 0.1)',
+                  backgroundColor: '#F8F6F1',
+                  color: 'var(--text-primary)',
                   fontSize: '0.9rem'
                 }}
               />
               <button
                 type="submit"
-                className="action-btn-circle"
+                className="btn btn-primary"
                 disabled={isAssistantLoading || !assistantInput.trim()}
-                title="Send message"
                 style={{
                   flexShrink: 0,
-                  width: '60px',
-                  height: '40px',
-                  fontSize: '0.8rem',
-                  fontWeight: 600,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em'
+                  width: '45px',
+                  height: '45px',
+                  borderRadius: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: 0
                 }}
               >
-                Send
+                <Send size={18} />
               </button>
             </form>
           </div>
@@ -1231,12 +1631,41 @@ function MainApp({ token, username, onLogout }: { token: string, username: strin
 export default function App() {
   const [token, setToken] = useState(localStorage.getItem('app-token') || '');
   const [username, setUsername] = useState(localStorage.getItem('app-username') || '');
+  const [showAuth, setShowAuth] = useState(false);
+
+  useEffect(() => {
+    // Check for token in URL (OAuth redirect)
+    const urlParams = new URLSearchParams(window.location.search);
+    const tokenFromUrl = urlParams.get('token');
+    const usernameFromUrl = urlParams.get('username');
+
+    if (tokenFromUrl && usernameFromUrl) {
+      handleLogin(tokenFromUrl, usernameFromUrl);
+      // Clean up URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
+    // Global click listener for landing page buttons
+    const handleGlobalClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      const button = target.closest('button');
+      if (button) {
+        const text = button.innerText.trim().toLowerCase();
+        if (text === 'get started' || text === 'upload notes' || text === 'upload your notes') {
+          setShowAuth(true);
+        }
+      }
+    };
+    window.addEventListener('click', handleGlobalClick);
+    return () => window.removeEventListener('click', handleGlobalClick);
+  }, []);
 
   const handleLogin = (newToken: string, newUsername: string) => {
     localStorage.setItem('app-token', newToken);
     localStorage.setItem('app-username', newUsername);
     setToken(newToken);
     setUsername(newUsername);
+    setShowAuth(false);
   };
 
   const handleLogout = () => {
@@ -1244,11 +1673,16 @@ export default function App() {
     localStorage.removeItem('app-username');
     setToken('');
     setUsername('');
+    setShowAuth(false);
   };
 
-  if (!token) {
-    return <AuthScreen onLogin={handleLogin} />;
+  if (token) {
+    return <MainApp token={token} username={username} onLogout={handleLogout} />;
   }
 
-  return <MainApp token={token} username={username} onLogout={handleLogout} />;
+  if (showAuth) {
+    return <AuthScreen onLogin={handleLogin} onBack={() => setShowAuth(false)} />;
+  }
+
+  return <LandingApp />;
 }
