@@ -38,6 +38,18 @@ export async function initDb() {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
+
+      CREATE TABLE IF NOT EXISTS concept_stats (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+        folder_id UUID REFERENCES folders(id) ON DELETE CASCADE,
+        concept_name VARCHAR(255) NOT NULL,
+        correct_count INTEGER DEFAULT 0,
+        attempt_count INTEGER DEFAULT 0,
+        last_score INTEGER,
+        last_attempted TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, folder_id, concept_name)
+      );
     `);
         console.log('Database tables initialized successfully');
     } catch (error) {
