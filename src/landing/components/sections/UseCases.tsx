@@ -6,28 +6,26 @@ export function UseCases() {
     <section 
       id="use-cases" 
       className="relative w-full py-48 overflow-hidden"
-      style={{ backgroundColor: '#ffffffff', color: '#333230ff' }}
+      style={{ backgroundColor: '#ffffffff', color: '#2c2b29ff' }}
     >
-      {/* Subtle vector background */}
       <div className="absolute top-0 right-0 w-[40%] h-full opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, #F3F0E7 1px, transparent 0)', backgroundSize: '32px 32px' }} />
       
       <div className="container mx-auto max-w-7xl px-6 md:px-12 relative z-10">
         <div className="mb-20 text-center">
-          <h2 className="text-4xl md:text-6xl font-serif text-paleivory mb-6 leading-tight">When Precision Matters</h2>
-          <p className="text-lg text-paleivory/60 max-w-2xl mx-auto leading-relaxed">
+          <h2 className="text-4xl md:text-6xl font-serif mb-6 leading-tight">When Precision Matters</h2>
+          <p className="text-lg max-w-2xl mx-auto leading-relaxed">
             Designed for the crucible of academia, where "almost right" is entirely wrong.
           </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
           
-          {/* Case 1: Exam Revision */}
           <UseCaseCard 
             title="Pre-Exam Revision"
             description="Consolidate weeks of lectures. Ask for summaries of complex topics, and get answers cited directly from your syllabus."
             delay={0.1}
           >
-            <svg viewBox="0 0 200 120" className="w-full h-full text-paleivory/60" fill="none" stroke="currentColor">
+            <svg viewBox="0 0 200 120" className="w-full h-full  /60" fill="none" stroke="currentColor">
               <rect x="20" y="20" width="60" height="80" rx="4" strokeWidth="1.5" />
               <path d="M25 35h50 M25 50h40 M25 65h50 M25 80h30" strokeWidth="1" strokeDasharray="4 2" />
               <path d="M90 60 c 20 0, 20 -20, 40 -20" strokeWidth="1.5" />
@@ -45,7 +43,7 @@ export function UseCases() {
             description="Break through writer's block. When you're stuck on a prompt, locate the exact theorem or case study needed to proceed."
             delay={0.3}
           >
-            <svg viewBox="0 0 200 120" className="w-full h-full text-paleivory/60" fill="none" stroke="currentColor">
+            <svg viewBox="0 0 200 120" className="w-full h-full  /60" fill="none" stroke="currentColor">
               <circle cx="50" cy="60" r="25" strokeWidth="1.5" strokeDasharray="4 4" />
               <circle cx="50" cy="60" r="4" fill="currentColor" />
               <path d="M75 60 L 130 60" strokeWidth="2" strokeDasharray="4 2" />
@@ -61,7 +59,7 @@ export function UseCases() {
             description="Resolve late-night confusion instantly. Don't wait for office hours to clarify conflicting definitions across chapters."
             delay={0.5}
           >
-             <svg viewBox="0 0 200 120" className="w-full h-full text-paleivory/60" fill="none" stroke="currentColor">
+             <svg viewBox="0 0 200 120" className="w-full h-full  /60" fill="none" stroke="currentColor">
               <rect x="20" y="20" width="45" height="40" rx="2" strokeWidth="1.5" />
               <rect x="20" y="70" width="45" height="30" rx="2" strokeWidth="1.5" />
               <path d="M65 40 Q 100 40, 100 60 T 130 60" strokeWidth="1.5" />
@@ -92,8 +90,8 @@ function UseCaseCard({ title, description, children, delay }: { title: string, d
           {children}
         </div>
       </div>
-      <h3 className="text-2xl font-serif text-paleivory font-medium mb-4">{title}</h3>
-      <p className="text-paleivory/60 leading-relaxed text-[15px]">
+      <h3 className="text-2xl font-serif   font-medium mb-4">{title}</h3>
+      <p className=" leading-relaxed text-[15px]">
         {description}
       </p>
     </motion.div>
