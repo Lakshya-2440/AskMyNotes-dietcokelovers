@@ -38,7 +38,6 @@ const upload = multer({ storage: multer.memoryStorage() });
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-123';
 
-// --- Simple RAG helpers adapted from demo app ---
 const chunkText = (text, maxChars = 800) => {
   const chunks = [];
   if (!text) return chunks;
@@ -93,7 +92,6 @@ const computeConfidence = (topScore) => {
   return 'Low';
 };
 
-// Middleware to verify JWT token
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -107,7 +105,6 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
-// Start Server and Initialize DB
 app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
   if (process.env.DATABASE_URL) {
@@ -117,7 +114,6 @@ app.listen(PORT, async () => {
   }
 });
 
-// --- AUTH ROUTES ---
 
 app.post('/api/auth/register', async (req, res) => {
   try {
@@ -191,10 +187,8 @@ app.get('/api/auth/google/callback', async (req, res) => {
     const payload = ticket.getPayload();
     const { sub: googleId, name: username, email } = payload;
 
-    // Use email as username if not provided or ensure uniqueness
     const userIdentifier = username || email.split('@')[0];
 
-    // Check if user exists, if not create
     let result = await pool.query('SELECT * FROM users WHERE username = $1', [userIdentifier]);
     let user;
 
@@ -215,8 +209,6 @@ app.get('/api/auth/google/callback', async (req, res) => {
     res.redirect('http://localhost:5173/?error=oauth_failed');
   }
 });
-
-// --- FOLDERS ROUTES ---
 
 app.get('/api/folders', authenticateToken, async (req, res) => {
   try {
@@ -260,7 +252,6 @@ app.delete('/api/folders/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// --- NOTES ROUTES ---
 
 app.get('/api/notes', authenticateToken, async (req, res) => {
   try {
@@ -351,8 +342,6 @@ app.post('/api/notes/upload', authenticateToken, upload.single('file'), async (r
   }
 });
 
-// --- AI CHAT ROUTE (RAG over notes) ---
-
 app.post('/api/chat', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -393,7 +382,6 @@ app.post('/api/chat', authenticateToken, async (req, res) => {
 
     const contextText = topChunks.map(chunk => `[Citation: ${chunk.noteTitle}, Chunk ${chunk.chunkIndex}]\n${chunk.text}`).join('\n\n---\n\n');
 
-    // Convert historical messages to OpenAI format
     const historyMessages = contextNotes.slice(-10).map(msg => ({
       role: msg.role === 'model' ? 'assistant' : 'user',
       content: msg.content
@@ -476,12 +464,10 @@ OUTPUT ONLY VALID JSON.`;
       return res.json({ reply: 'Failed to generate response correctly.' });
     }
 
-    // Handle exact refusal case where it might just dump "Not found..." inside spoken_answer
     if (aiResponse.spoken_answer && aiResponse.spoken_answer.includes(`Not found in your notes for`)) {
       return res.json({ reply: aiResponse.spoken_answer });
     }
 
-    // Reconstruct into markdown-equivalent text for frontend display (no confidence section)
     let finalReply = aiResponse.spoken_answer || '';
 
     if (aiResponse.citations && aiResponse.citations.length > 0) {
@@ -497,8 +483,6 @@ OUTPUT ONLY VALID JSON.`;
     res.status(500).json({ error: 'Failed to process AI request' });
   }
 });
-
-// --- STUDY MODE ROUTE (MCQs + short answers from notes) ---
 
 app.post('/api/study', authenticateToken, async (req, res) => {
   try {
@@ -635,8 +619,6 @@ ${contextText}
   }
 });
 
-// --- KNOWLEDGE GAP MAP & PERFORMANCE ROUTES ---
-
 app.get('/api/study/gap-map', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -683,7 +665,6 @@ app.post('/api/study/performance', authenticateToken, async (req, res) => {
   }
 });
 
-// --- GRADE SHORT ANSWER ROUTE ---
 app.post('/api/grade', authenticateToken, async (req, res) => {
   try {
     const { question, userAnswer, modelAnswer } = req.body || {};
@@ -729,8 +710,6 @@ app.post('/api/grade', authenticateToken, async (req, res) => {
   }
 });
 
-// --- LAYERED EXPLANATIONS ---
-
 app.post('/api/study/layered-explain', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -768,8 +747,6 @@ app.post('/api/study/layered-explain', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Failed to generate explanation' });
   }
 });
-
-// --- VIVA SIMULATOR ---
 
 app.post('/api/study/viva', authenticateToken, async (req, res) => {
   try {
@@ -814,7 +791,6 @@ app.post('/api/study/viva', authenticateToken, async (req, res) => {
   }
 });
 
-// --- HUGGING FACE SPEECH-TO-TEXT (STT) ---
 app.post('/api/speech-to-text', authenticateToken, upload.single('audio'), async (req, res) => {
   try {
     if (!HF_API_KEY) {
@@ -859,7 +835,6 @@ app.post('/api/speech-to-text', authenticateToken, upload.single('audio'), async
   }
 });
 
-// --- HUGGING FACE TEXT-TO-SPEECH (TTS) ---
 app.post('/api/text-to-speech', authenticateToken, async (req, res) => {
   try {
     if (!HF_API_KEY) {

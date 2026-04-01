@@ -10,7 +10,6 @@ const pool = new Pool({
     }
 });
 
-// Function to initialize tables
 export async function initDb() {
     const client = await pool.connect();
     try {
